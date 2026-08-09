@@ -1,56 +1,58 @@
-# LangSmith ハンズオンチュートリアル（Python）
+English | [日本語](README.ja.md)
 
-このリポジトリは、LangSmithを実際に手を動かしながら学ぶためのハンズオン用プロジェクトです。以下の3つを順番に体験します。
+# LangSmith Hands-On Tutorial (Python)
 
-1. トレーシング（Tracing）— LLMアプリの実行内容を可視化する
-2. 評価（Evaluation）— LLMアプリの出力品質を定量的に測定する
-3. プロンプト管理（Prompt Hub）— プロンプトをバージョン管理・共有する
+This repository is a hands-on project for learning LangSmith by doing. You'll walk through three parts in order:
 
-所要時間の目安は45〜60分です。Pythonの基本文法がわかることを前提としています。
+1. **Tracing** — visualize what happens inside your LLM app at runtime
+2. **Evaluation** — quantitatively measure the quality of your LLM app's output
+3. **Prompt management (Prompt Hub)** — version and share prompts
 
-## リポジトリ構成
+Expect to spend 45-60 minutes. Basic familiarity with Python is assumed.
+
+## Repository layout
 
 ```
 langsmith-handson/
-├── .env.example       # 環境変数のテンプレート（コミットする）
-├── .gitignore         # .env などをGit管理から除外
-├── requirements.txt   # 依存パッケージ
-├── app.py             # Part 1: トレーシングのサンプルアプリ
-├── dataset.py          # Part 2: 評価用データセットの作成
-├── eval.py             # Part 2: 評価対象関数・評価者・評価の実行
-├── create_prompt.py    # Part 3: プロンプトの作成とPrompt Hubへのプッシュ
-├── test_prompt.py      # Part 3: プロンプトの取得と実行
-└── iterate_prompt.py   # Part 3: プロンプトの更新（新しいコミット）
+├── .env.example       # environment variable template (safe to commit)
+├── .gitignore         # excludes .env and friends from Git
+├── requirements.txt   # dependencies
+├── app.py             # Part 1: tracing sample app
+├── dataset.py          # Part 2: create the evaluation dataset
+├── eval.py             # Part 2: target function, evaluator, and run
+├── create_prompt.py    # Part 3: create a prompt and push it to Prompt Hub
+├── test_prompt.py      # Part 3: pull and run a prompt
+└── iterate_prompt.py   # Part 3: update a prompt (new commit)
 ```
 
-`.env` 自体はこのリポジトリに含まれていません（`.gitignore` で除外）。各自で作成してAPIキーを設定してください。
+`.env` itself is not included in this repository (excluded via `.gitignore`). Create your own and set your API keys.
 
 ---
 
-## 0. 事前準備
+## 0. Prerequisites
 
-始める前に、以下を用意してください。
+Before you start, make sure you have:
 
-- **LangSmithアカウント**：[smith.langchain.com](https://smith.langchain.com) でサインアップ（無料プランあり）
-- **LangSmith APIキー**：LangSmithの `Settings` → `API Keys` から発行
-- **Anthropic APIキー**：[console.anthropic.com](https://console.anthropic.com/settings/keys) から発行（本チュートリアルはAnthropic（Claude）をLLMプロバイダーとして使用します）
-- **Python 3.9以上**
+- **A LangSmith account**: sign up at [smith.langchain.com](https://smith.langchain.com) (a free plan is available)
+- **A LangSmith API key**: issued from LangSmith's `Settings` → `API Keys`
+- **An Anthropic API key**: issued from [console.anthropic.com](https://console.anthropic.com/settings/keys) (this tutorial uses Anthropic (Claude) as the LLM provider)
+- **Python 3.9 or later**
 
-### セットアップ
+### Setup
 
-APIキーはシェルの `export` に直書きせず、`.env` ファイルに書いて `python-dotenv` で読み込みます。`.env` は `.gitignore` で除外されるため、キーが誤ってリポジトリにコミットされる心配がありません。
+Instead of hardcoding API keys with shell `export`, this project writes them to a `.env` file and loads them with `python-dotenv`. `.env` is excluded via `.gitignore`, so there's no risk of accidentally committing your keys to the repository.
 
 ```bash
 cd langsmith-handson
 python3 -m venv .venv
-source .venv/bin/activate  # Windowsの場合は .venv\Scripts\activate
+source .venv/bin/activate  # on Windows: .venv\Scripts\activate
 python3 -m pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-### 環境変数の設定（.envファイル）
+### Configure environment variables (.env file)
 
-`.env.example` をコピーして `.env` を作成し、値を自分のAPIキーに置き換えます。
+Copy `.env.example` to `.env` and replace the values with your own API keys.
 
 ```bash
 cp .env.example .env
@@ -62,56 +64,56 @@ LANGSMITH_TRACING=true
 LANGSMITH_API_KEY=your-langsmith-api-key
 LANGSMITH_PROJECT=langsmith-handson
 
-# US以外のリージョン（EU/APACなど）を使う場合のみ設定
+# Only set this if you're on a non-US region (EU/APAC, etc.)
 # LANGSMITH_ENDPOINT=https://eu.api.smith.langchain.com
 
 ANTHROPIC_API_KEY=your-anthropic-api-key
 ```
 
-各Pythonスクリプトの冒頭では以下のように `load_dotenv()` を呼んでおり、`.env` の内容が自動的に環境変数として読み込まれます。
+Each Python script starts by calling `load_dotenv()`, which automatically loads the contents of `.env` into environment variables.
 
 ```python
 from dotenv import load_dotenv
 load_dotenv()
 ```
 
-これで準備は完了です。ここから3つのパートを順に進めます。
+You're all set. Let's walk through the three parts.
 
 ---
 
-## Part 1. トレーシング（Tracing）
+## Part 1. Tracing
 
-LangSmithの最も基本的な機能が「トレース」です。LLM呼び出しやツール実行など、リクエストの一連の流れを記録し、LangSmithのUI上で可視化できます。
+The most fundamental feature of LangSmith is the "trace." It records the full sequence of an LLM call, tool execution, and everything in between, so you can visualize it in the LangSmith UI.
 
-### 1-1. サンプルアプリ（`app.py`）
+### 1-1. The sample app (`app.py`)
 
-このアプリは「質問に対してコンテキストを取得し、それを踏まえてLLMが回答する」という簡単なアシスタントです。
+This app is a simple assistant: it retrieves context for a question, then has the LLM answer using that context.
 
 ```python
 # app.py
 from dotenv import load_dotenv
 
-load_dotenv()  # .env から環境変数を読み込む
+load_dotenv()  # load environment variables from .env
 
 import anthropic
 from langsmith.wrappers import wrap_anthropic
 from langsmith import traceable
 
-# Anthropicクライアントをラップすると、すべてのLLM呼び出しが自動的にトレースされる
+# wrapping the Anthropic client automatically traces every LLM call
 client = wrap_anthropic(anthropic.Anthropic())
 
-@traceable(run_type="tool")  # ツール呼び出しとしてトレースする
+@traceable(run_type="tool")  # trace this as a tool call
 def get_context(question: str) -> str:
-    # 実際のアプリではベクトルDBやナレッジベースを検索する処理になる
-    return "LangSmithのトレースはDeveloperプランで14日間保存されます。"
+    # in a real app this would query a vector DB or knowledge base
+    return "LangSmith traces are stored for 14 days on the Developer plan."
 
-@traceable  # この関数全体を1つのトレースとして記録する
+@traceable  # record this entire function as a single trace
 def assistant(question: str) -> str:
     context = get_context(question)
     message = client.messages.create(
         model="claude-sonnet-4-6",
         max_tokens=1024,
-        system=f"以下のコンテキストを踏まえて回答してください。\n\nコンテキスト: {context}",
+        system=f"Answer using the context below.\n\nContext: {context}",
         messages=[
             {"role": "user", "content": question},
         ],
@@ -119,96 +121,96 @@ def assistant(question: str) -> str:
     return message.content[0].text
 
 if __name__ == "__main__":
-    print(assistant("LangSmithのトレースはどのくらい保存されますか？"))
+    print(assistant("How long are LangSmith traces stored?"))
 ```
 
-ポイントは2つのラッパーです。
+There are two wrappers to note:
 
-- `wrap_anthropic(anthropic.Anthropic())`：Anthropicクライアントをラップし、すべてのLLM呼び出しを自動でネストされたスパンとしてログに記録します。
-- `@traceable`：関数をラップし、その入出力とネストされた処理を1つのトレースとしてまとめます。`run_type="tool"` を指定すると、ツール呼び出しとして種別が記録されます。
+- `wrap_anthropic(anthropic.Anthropic())`: wraps the Anthropic client so every LLM call is automatically logged as a nested span.
+- `@traceable`: wraps a function so its inputs, outputs, and any nested calls are captured as a single trace. Passing `run_type="tool"` records it as a tool call.
 
-> **Note**：Anthropicの Messages API はOpenAIと異なり、`system` プロンプトを `messages` 配列ではなく専用の `system` パラメータとして渡します。応答本文も `message.content[0].text` から取得します。
+> **Note**: Anthropic's Messages API differs from OpenAI's — the `system` prompt is passed as a dedicated `system` parameter rather than inside the `messages` array, and the response text is read from `message.content[0].text`.
 
-### 1-2. 実行する
+### 1-2. Run it
 
 ```bash
 python3 app.py
 ```
 
-### 1-3. LangSmith UIでトレースを確認する
+### 1-3. View the trace in the LangSmith UI
 
-1. [LangSmith UI](https://smith.langchain.com) を開き、左メニューの **Tracing** に移動します。
-2. **default** プロジェクト（`LANGSMITH_PROJECT` を設定していない場合は自動でここに送られます）を選択します。
-3. `assistant` という行をクリックしてトレースを開きます。
-4. **Details** タブで、`assistant` 関数の中に `get_context`（ツール呼び出し）と Anthropic呼び出しがネストされたツリー構造として表示されることを確認します。
+1. Open the [LangSmith UI](https://smith.langchain.com) and go to **Tracing** in the left menu.
+2. Select the **default** project (traces go here automatically if you haven't set `LANGSMITH_PROJECT`).
+3. Click the `assistant` row to open the trace.
+4. On the **Details** tab, confirm that `get_context` (the tool call) and the Anthropic call appear as a nested tree inside the `assistant` function.
 
-これでLLMアプリの内部で「何が」「どの順番で」「どんな入出力で」実行されたかが一目でわかるようになりました。
+Now you can see exactly what ran, in what order, and with what inputs and outputs, inside your LLM app.
 
-> **Tips**：特定のプロジェクトにトレースを送りたい場合は、`.env` に `LANGSMITH_PROJECT="my-project-name"` を設定してください。
+> **Tip**: To send traces to a specific project, set `LANGSMITH_PROJECT="my-project-name"` in `.env`.
 
 ---
 
-## Part 2. 評価（Evaluation）
+## Part 2. Evaluation
 
-トレーシングで「何が起きたか」は見えるようになりましたが、次は「出力の品質」を定量的に測る番です。LangSmithの評価機能は次の3要素で構成されます。
+Tracing shows you what happened. Next, it's time to measure output quality quantitatively. LangSmith's evaluation feature has three components:
 
-- **Dataset（データセット）**：テスト用の入力（と、あれば正解の出力）の集合
-- **Target function（対象関数）**：評価したいアプリのロジック本体
-- **Evaluators（評価者）**：出力を採点する関数
+- **Dataset**: a set of test inputs (and, if available, expected outputs)
+- **Target function**: the application logic you want to evaluate
+- **Evaluators**: functions that score the output
 
-### 2-1. データセットを作成する（`dataset.py`）
+### 2-1. Create a dataset (`dataset.py`)
 
 ```python
 # dataset.py
 from dotenv import load_dotenv
 
-load_dotenv()  # .env から環境変数を読み込む
+load_dotenv()  # load environment variables from .env
 
 from langsmith import Client
 
 def main():
     client = Client()
 
-    # LangSmith上にデータセットを作成
+    # create a dataset in LangSmith
     dataset = client.create_dataset(
         dataset_name="Sample dataset",
-        description="LangSmithハンズオン用のサンプルデータセット"
+        description="A sample dataset for the LangSmith hands-on tutorial"
     )
 
-    # テストケース（入力と正解出力のペア）を定義
+    # define test cases (input / expected output pairs)
     examples = [
         {
-            "inputs": {"question": "キリマンジャロ山はどの国にありますか？"},
-            "outputs": {"answer": "キリマンジャロ山はタンザニアにあります。"},
+            "inputs": {"question": "Which country is Mount Kilimanjaro located in?"},
+            "outputs": {"answer": "Mount Kilimanjaro is located in Tanzania."},
         },
         {
-            "inputs": {"question": "地球上で最も低い場所はどこですか？"},
-            "outputs": {"answer": "地球上で最も低い場所は死海です。"},
+            "inputs": {"question": "What is Earth's lowest point?"},
+            "outputs": {"answer": "Earth's lowest point is the Dead Sea."},
         },
     ]
 
     client.create_examples(dataset_id=dataset.id, examples=examples)
-    print("データセットを作成しました:", dataset.name)
+    print("Created dataset:", dataset.name)
 
 if __name__ == "__main__":
     main()
 ```
 
-実行します。
+Run it.
 
 ```bash
 python3 dataset.py
 ```
 
-### 2-2. 評価対象の関数（Target function）（`eval.py`）
+### 2-2. Define the target function (`eval.py`)
 
-評価したいロジック（ここでは質問に答える単純なLLM呼び出し）を定義します。
+Define the logic you want to evaluate — here, a simple LLM call that answers a question.
 
 ```python
 # eval.py
 from dotenv import load_dotenv
 
-load_dotenv()  # .env から環境変数を読み込む
+load_dotenv()  # load environment variables from .env
 
 import anthropic
 from langsmith import Client
@@ -216,15 +218,15 @@ from langsmith.wrappers import wrap_anthropic
 from openevals.llm import create_llm_as_judge
 from openevals.prompts import CORRECTNESS_PROMPT
 
-# Anthropicクライアントをラップしてトレースを有効化
+# wrap the Anthropic client to enable tracing
 anthropic_client = wrap_anthropic(anthropic.Anthropic())
 
-# 評価したいアプリのロジック。データセットの inputs が自動的に渡される
+# the application logic you want to evaluate; the dataset's inputs are passed in automatically
 def target(inputs: dict) -> dict:
     message = anthropic_client.messages.create(
         model="claude-sonnet-4-6",
         max_tokens=1024,
-        system="質問に正確に答えてください",
+        system="Answer the following question accurately",
         messages=[
             {"role": "user", "content": inputs["question"]},
         ],
@@ -232,9 +234,9 @@ def target(inputs: dict) -> dict:
     return {"answer": message.content[0].text.strip()}
 ```
 
-### 2-3. 評価者（Evaluator）
+### 2-3. Define an evaluator
 
-`openevals` ライブラリの `CORRECTNESS_PROMPT`（LLM-as-judge、つまりLLM自身に採点させる仕組み）を使います。
+We use `CORRECTNESS_PROMPT` from the `openevals` library — an LLM-as-judge, meaning the LLM itself scores the output.
 
 ```python
 def correctness_evaluator(inputs: dict, outputs: dict, reference_outputs: dict):
@@ -250,17 +252,17 @@ def correctness_evaluator(inputs: dict, outputs: dict, reference_outputs: dict):
     )
 ```
 
-> `model="anthropic:claude-sonnet-4-6"` のように `provider:model` 形式の文字列を渡すと、`openevals` が内部でLangChainのチャットモデルを初期化します。これには `langchain-anthropic` パッケージが必要です（`requirements.txt` に含まれています）。
+> Passing a `provider:model` string like `model="anthropic:claude-sonnet-4-6"` tells `openevals` to initialize a LangChain chat model internally. This requires the `langchain-anthropic` package (already included in `requirements.txt`).
 
-評価者は次の3つを比較して採点します。
+The evaluator compares three things:
 
-- `inputs`：対象関数に渡された入力（質問文）
-- `outputs`：対象関数が返した出力（モデルの回答）
-- `reference_outputs`：データセットに登録した正解（2-1参照）
+- `inputs`: what was passed into the target function (the question)
+- `outputs`: what the target function returned (the model's answer)
+- `reference_outputs`: the expected answer registered in the dataset (see 2-1)
 
-### 2-4. 評価を実行する
+### 2-4. Run the evaluation
 
-`Client.evaluate(...)` で実験を実行します。
+`Client.evaluate(...)` runs the experiment.
 
 ```python
 def main():
@@ -270,7 +272,7 @@ def main():
         data="Sample dataset",
         evaluators=[
             correctness_evaluator,
-            # 複数の評価者を並べて追加することもできる
+            # you can add multiple evaluators here
         ],
         experiment_prefix="first-eval-in-langsmith",
         max_concurrency=2,
@@ -281,34 +283,34 @@ if __name__ == "__main__":
     main()
 ```
 
-実行します。
+Run it.
 
 ```bash
 python3 eval.py
 ```
 
-実行後、以下のようなリンクがターミナルに出力されます。
+After running, a link like this is printed to the terminal:
 
 ```
 View the evaluation results for experiment: 'first-eval-in-langsmith-xxxxxxxx' at:
 https://smith.langchain.com/.../compare?selectedSessions=...
 ```
 
-このリンクを開くと、**Datasets & Experiments** ページで各テストケースの `Inputs`・`Reference Output`・`Outputs`・スコア（correctness）が表形式で確認できます。これにより、プロンプトやモデルを変更するたびに「品質が上がったか下がったか」を定量的に比較できるようになります。
+Open the link to see a table on the **Datasets & Experiments** page showing each test case's `Inputs`, `Reference Output`, `Outputs`, and correctness score. This lets you quantitatively compare whether quality improved or regressed each time you change a prompt or model.
 
 ---
 
-## Part 3. プロンプト管理（Prompt Hub）
+## Part 3. Prompt management (Prompt Hub)
 
-最後に、プロンプトをコードから切り離してバージョン管理・共有する仕組みであるPrompt Hubを使います。
+Finally, let's use Prompt Hub — a mechanism for versioning and sharing prompts independently of your code.
 
-### 3-1. プロンプトを作成してプッシュする（`create_prompt.py`）
+### 3-1. Create and push a prompt (`create_prompt.py`)
 
 ```python
 # create_prompt.py
 from dotenv import load_dotenv
 
-load_dotenv()  # .env から環境変数を読み込む
+load_dotenv()  # load environment variables from .env
 
 from langsmith import Client
 from langchain_core.prompts import ChatPromptTemplate
@@ -316,30 +318,30 @@ from langchain_core.prompts import ChatPromptTemplate
 client = Client()
 
 prompt = ChatPromptTemplate([
-    ("system", "あなたは親切なチャットボットです。"),
+    ("system", "You are a helpful chatbot."),
     ("user", "{question}"),
 ])
 
 client.push_prompt("prompt-quickstart", object=prompt)
 ```
 
-実行します。
+Run it.
 
 ```bash
 python3 create_prompt.py
 ```
 
-出力されたリンクを開くと、LangSmith UIの **Prompts** セクションに新しいプロンプト（`prompt-quickstart`）が作成されているのが確認できます。
+Follow the printed link to confirm that a new prompt (`prompt-quickstart`) now appears in the **Prompts** section of the LangSmith UI.
 
-### 3-2. プロンプトを取得して使う（`test_prompt.py`）
+### 3-2. Pull and use a prompt (`test_prompt.py`)
 
-先ほどプッシュしたプロンプトを取得（pull）して実際にLLM呼び出しに使います。
+Pull the prompt you just pushed and use it in an actual LLM call.
 
 ```python
 # test_prompt.py
 from dotenv import load_dotenv
 
-load_dotenv()  # .env から環境変数を読み込む
+load_dotenv()  # load environment variables from .env
 
 from langsmith import Client
 from langchain_anthropic import ChatAnthropic
@@ -347,32 +349,32 @@ from langchain_anthropic import ChatAnthropic
 client = Client()
 model = ChatAnthropic(model="claude-sonnet-4-6")
 
-# 最新バージョンのプロンプトを取得
+# pull the latest version of the prompt
 prompt = client.pull_prompt("prompt-quickstart")
 
-# プロンプトとモデルをつないでそのまま呼び出す
+# chain the prompt and model together and invoke it directly
 chain = prompt | model
-response = chain.invoke({"question": "空はなぜ青いのですか？"})
+response = chain.invoke({"question": "Why is the sky blue?"})
 print(response.content)
 ```
 
-> Anthropicでは `langchain-anthropic` の `ChatAnthropic` を使い、`prompt | model` というLangChainのRunnable構文でプロンプトとモデルを直接つないでいます。OpenAIの生SDKを使う場合と違い、メッセージ形式の変換（`convert_to_openai_messages` 相当の処理）を自分で書く必要がありません。
+> For Anthropic, we use `ChatAnthropic` from `langchain-anthropic` and connect the prompt and model directly with LangChain's `prompt | model` runnable syntax. Unlike using the raw OpenAI SDK, there's no need to write your own message-format conversion (the equivalent of `convert_to_openai_messages`).
 
 ```bash
 python3 test_prompt.py
 ```
 
-> 特定バージョンを固定したい場合は `client.pull_prompt("prompt-quickstart:<commit-hash>")` のようにコミットハッシュを指定します。本番環境ではこの方法で再現性を確保するのが推奨されます。
+> To pin a specific version, pass a commit hash like `client.pull_prompt("prompt-quickstart:<commit-hash>")`. This is the recommended way to ensure reproducibility in production.
 
-### 3-3. プロンプトを更新（新しいバージョンをコミット）する（`iterate_prompt.py`）
+### 3-3. Update a prompt (commit a new version) (`iterate_prompt.py`)
 
-同じプロンプト名で再度 `push_prompt` を呼ぶと、新しいコミットとして履歴に追加されます（過去のバージョンは失われません）。
+Calling `push_prompt` again with the same prompt name adds a new commit to its history (previous versions are preserved).
 
 ```python
 # iterate_prompt.py
 from dotenv import load_dotenv
 
-load_dotenv()  # .env から環境変数を読み込む
+load_dotenv()  # load environment variables from .env
 
 from langsmith import Client
 from langchain_core.prompts import ChatPromptTemplate
@@ -380,7 +382,7 @@ from langchain_core.prompts import ChatPromptTemplate
 client = Client()
 
 new_prompt = ChatPromptTemplate([
-    ("system", "あなたは親切なチャットボットです。日本語の敬語で回答してください。"),
+    ("system", "You are a helpful chatbot. Always respond in a formal, professional tone."),
     ("user", "{question}"),
 ])
 
@@ -391,30 +393,30 @@ client.push_prompt("prompt-quickstart", object=new_prompt)
 python3 iterate_prompt.py
 ```
 
-LangSmith UIの `Prompts` → `prompt-quickstart` を開くと、2つのコミット履歴が確認できます。チームメンバーはPlayground上でも直接プロンプトを編集し、新しいコミットとして保存できます。
+Open `Prompts` → `prompt-quickstart` in the LangSmith UI to see two commits in the history. Workspace members can also edit prompts directly in the Playground and save changes as new commits.
 
 ---
 
-## まとめ：3つの機能のつながり
+## Summary: how the three features connect
 
-| 機能 | 役割 | 対応ファイル |
+| Feature | Role | Files |
 | --- | --- | --- |
-| トレーシング | 実行の中身を可視化しデバッグする | `app.py` |
-| 評価 | 出力品質を定量的に測定・比較する | `dataset.py`, `eval.py` |
-| プロンプト管理 | プロンプトをバージョン管理・共有する | `create_prompt.py`, `test_prompt.py`, `iterate_prompt.py` |
+| Tracing | Visualize and debug what's happening inside a run | `app.py` |
+| Evaluation | Quantitatively measure and compare output quality | `dataset.py`, `eval.py` |
+| Prompt management | Version and share prompts | `create_prompt.py`, `test_prompt.py`, `iterate_prompt.py` |
 
-実務での典型的なワークフローは、Prompt Hubでプロンプトを管理しながらPlaygroundや評価で品質を検証し、本番環境ではトレーシングで実際の挙動を継続的に監視する、というサイクルになります。
+A typical real-world workflow: manage prompts in Prompt Hub, validate quality with the Playground and evaluations, and continuously monitor actual behavior in production with tracing.
 
-## 次のステップ
+## Next steps
 
-- **LangChain/LangGraphとの統合**：LangChainやLangGraphを使っている場合、環境変数を設定するだけでトレーシングが有効になります。
-- **オンライン評価**：本番トラフィックに対してLLM-as-judgeを自動実行し、継続的に品質を監視できます。
-- **カスタム評価者**：`openevals` の組み込み評価者だけでなく、任意のPythonコードで評価ロジックを定義することも可能です。
-- **LangSmith CLI**：ターミナルからトレースを検査することもできます。
+- **LangChain/LangGraph integration**: if you're using LangChain or LangGraph, tracing can be enabled with just an environment variable.
+- **Online evaluation**: run LLM-as-judge automatically against production traffic to continuously monitor quality.
+- **Custom evaluators**: beyond the built-in evaluators in `openevals`, you can define evaluation logic in arbitrary Python code.
+- **LangSmith CLI**: inspect traces directly from the terminal.
 
-## 参考リンク
+## References
 
 - [Tracing quickstart](https://docs.langchain.com/langsmith/observability-quickstart)
 - [Evaluation quickstart](https://docs.langchain.com/langsmith/evaluation-quickstart)
 - [Prompt engineering quickstart](https://docs.langchain.com/langsmith/prompt-engineering-quickstart)
-- [LangSmith 公式サイト](https://smith.langchain.com)
+- [LangSmith official site](https://smith.langchain.com)

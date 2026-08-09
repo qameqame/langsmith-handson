@@ -1,29 +1,29 @@
 # app.py
 from dotenv import load_dotenv
 
-load_dotenv()  # .env から環境変数を読み込む
+load_dotenv()  # load environment variables from .env
 
 import anthropic
 from langsmith.wrappers import wrap_anthropic
 from langsmith import traceable
 
-# Anthropicクライアントをラップすると、すべてのLLM呼び出しが自動的にトレースされる
+# wrapping the Anthropic client automatically traces every LLM call
 client = wrap_anthropic(anthropic.Anthropic())
 
 
-@traceable(run_type="tool")  # ツール呼び出しとしてトレースする
+@traceable(run_type="tool")  # trace this as a tool call
 def get_context(question: str) -> str:
-    # 実際のアプリではベクトルDBやナレッジベースを検索する処理になる
-    return "LangSmithのトレースはDeveloperプランで14日間保存されます。"
+    # in a real app this would query a vector DB or knowledge base
+    return "LangSmith traces are stored for 14 days on the Developer plan."
 
 
-@traceable  # この関数全体を1つのトレースとして記録する
+@traceable  # record this entire function as a single trace
 def assistant(question: str) -> str:
     context = get_context(question)
     message = client.messages.create(
         model="claude-sonnet-4-6",
         max_tokens=1024,
-        system=f"以下のコンテキストを踏まえて回答してください。\n\nコンテキスト: {context}",
+        system=f"Answer using the context below.\n\nContext: {context}",
         messages=[
             {"role": "user", "content": question},
         ],
@@ -32,4 +32,4 @@ def assistant(question: str) -> str:
 
 
 if __name__ == "__main__":
-    print(assistant("LangSmithのトレースはどのくらい保存されますか？"))
+    print(assistant("How long are LangSmith traces stored?"))

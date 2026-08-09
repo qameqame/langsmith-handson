@@ -1,7 +1,7 @@
 # test_prompt.py
 from dotenv import load_dotenv
 
-load_dotenv()  # .env から環境変数を読み込む
+load_dotenv()  # load environment variables from .env
 
 from langsmith import Client
 from langchain_anthropic import ChatAnthropic
@@ -9,10 +9,10 @@ from langchain_anthropic import ChatAnthropic
 client = Client()
 model = ChatAnthropic(model="claude-sonnet-4-6")
 
-# 最新バージョンのプロンプトを取得
+# pull the latest version of the prompt
 prompt = client.pull_prompt("prompt-quickstart")
 
-# プロンプトとモデルをつないでそのまま呼び出す
+# chain the prompt and model together and invoke it directly
 chain = prompt | model
-response = chain.invoke({"question": "空はなぜ青いのですか？"})
+response = chain.invoke({"question": "Why is the sky blue?"})
 print(response.content)

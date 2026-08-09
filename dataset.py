@@ -1,7 +1,7 @@
 # dataset.py
 from dotenv import load_dotenv
 
-load_dotenv()  # .env から環境変数を読み込む
+load_dotenv()  # load environment variables from .env
 
 from langsmith import Client
 
@@ -9,26 +9,26 @@ from langsmith import Client
 def main():
     client = Client()
 
-    # LangSmith上にデータセットを作成
+    # create a dataset in LangSmith
     dataset = client.create_dataset(
         dataset_name="Sample dataset",
-        description="LangSmithハンズオン用のサンプルデータセット",
+        description="A sample dataset for the LangSmith hands-on tutorial",
     )
 
-    # テストケース（入力と正解出力のペア）を定義
+    # define test cases (input / expected output pairs)
     examples = [
         {
-            "inputs": {"question": "キリマンジャロ山はどの国にありますか？"},
-            "outputs": {"answer": "キリマンジャロ山はタンザニアにあります。"},
+            "inputs": {"question": "Which country is Mount Kilimanjaro located in?"},
+            "outputs": {"answer": "Mount Kilimanjaro is located in Tanzania."},
         },
         {
-            "inputs": {"question": "地球上で最も低い場所はどこですか？"},
-            "outputs": {"answer": "地球上で最も低い場所は死海です。"},
+            "inputs": {"question": "What is Earth's lowest point?"},
+            "outputs": {"answer": "Earth's lowest point is the Dead Sea."},
         },
     ]
 
     client.create_examples(dataset_id=dataset.id, examples=examples)
-    print("データセットを作成しました:", dataset.name)
+    print("Created dataset:", dataset.name)
 
 
 if __name__ == "__main__":

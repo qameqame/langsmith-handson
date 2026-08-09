@@ -1,4 +1,4 @@
-# 環境変数（APIキーを含むため必ず除外する）
+# environment variables (contains API keys, must always be excluded)
 .env
 
 # Python
