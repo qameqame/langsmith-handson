@@ -1,0 +1,6 @@
+langsmith
+anthropic
+langchain_core
+langchain-anthropic
+openevals
+python-dotenv

@@ -1,0 +1,10 @@
+# 環境変数（APIキーを含むため必ず除外する）
+.env
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# OS
+.DS_Store
